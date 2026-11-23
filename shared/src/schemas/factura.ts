@@ -5,7 +5,13 @@
 
 import { z } from "zod";
 import { REFERENCE_CODES, REFERENCE_DOC_TYPES } from "../constants/index.js";
-import { CURRENCY_CODES, OTHER_CHARGE_TYPES } from "../generated/index.js";
+import {
+  CURRENCY_CODES,
+  IdentificationType,
+  OTHER_CHARGE_TYPES,
+  PaymentMethod,
+  SaleCondition,
+} from "../generated/index.js";
 import {
   TaxCodeSchema,
   IvaRateCodeSchema,
@@ -27,52 +33,95 @@ export const CodigoTipoMonedaSchema = z.object({
 });
 
 /** Schema for reference to another document (InformacionReferencia), v4.4. */
-export const InformacionReferenciaSchema = z.object({
-  /** Referenced document type code (TipoDocIR). */
-  tipoDoc: z.enum(REFERENCE_DOC_TYPES),
+export const InformacionReferenciaSchema = z
+  .object({
+    /** Referenced document type code (TipoDocIR). */
+    tipoDoc: z.enum(REFERENCE_DOC_TYPES),
 
-  /** Free-text document type. Required when tipoDoc is "99" (5-100 chars). */
-  tipoDocOtros: z.string().min(5).max(100).optional(),
+    /** Free-text document type. Required when tipoDoc is "99" (5-100 chars). */
+    tipoDocOtros: z.string().min(5).max(100).optional(),
 
-  /** Referenced document clave or number. Optional, max 50 chars. */
-  numero: z.string().min(1).max(50).optional(),
+    /** Referenced document clave or number. Optional, max 50 chars. */
+    numero: z.string().min(1).max(50).optional(),
 
-  /** Date of the referenced document (ISO 8601) — emitted as FechaEmisionIR. */
-  fechaEmision: z.string().min(1),
+    /** Date of the referenced document (ISO 8601) — emitted as FechaEmisionIR. */
+    fechaEmision: z.string().min(1),
 
-  /** Reference reason code. Optional in v4.4. */
-  codigo: z.enum(REFERENCE_CODES).optional(),
+    /** Reference reason code. Optional in v4.4. */
+    codigo: z.enum(REFERENCE_CODES).optional(),
 
-  /** Free-text reason code. Required when codigo is "99" (5-100 chars). */
-  codigoOtros: z.string().min(5).max(100).optional(),
+    /** Free-text reason code. Required when codigo is "99" (5-100 chars). */
+    codigoOtros: z.string().min(5).max(100).optional(),
 
-  /** Description of the reason. Optional, max 180 chars. */
-  razon: z.string().min(1).max(180).optional(),
-});
+    /** Description of the reason. Optional, max 180 chars. */
+    razon: z.string().min(1).max(180).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tipoDoc === "99" && !data.tipoDocOtros) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'tipoDocOtros is required when tipoDoc is "99"',
+        path: ["tipoDocOtros"],
+      });
+    }
+    if (data.codigo === "99" && !data.codigoOtros) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'codigoOtros is required when codigo is "99"',
+        path: ["codigoOtros"],
+      });
+    }
+  });
 
 /** Schema for other charges (OtrosCargos), v4.4. */
-export const OtroCargoSchema = z.object({
-  /** Charge document type (TipoDocumentoOC). */
-  tipoDocumento: z.enum(OTHER_CHARGE_TYPES),
+export const OtroCargoSchema = z
+  .object({
+    /** Charge document type (TipoDocumentoOC). */
+    tipoDocumento: z.enum(OTHER_CHARGE_TYPES),
 
-  /** Free-text charge type. Required when tipoDocumento is "99" (5-100 chars). */
-  tipoDocumentoOtros: z.string().min(5).max(100).optional(),
+    /** Free-text charge type. Required when tipoDocumento is "99" (5-100 chars). */
+    tipoDocumentoOtros: z.string().min(5).max(100).optional(),
 
-  /** Third-party identification. Optional. */
-  identificacionTercero: IdentificacionSchema.optional(),
+    /** Third-party identification. Optional. */
+    identificacionTercero: IdentificacionSchema.optional(),
 
-  /** Third-party name. Optional, 5-100 chars. */
-  nombreTercero: z.string().min(5).max(100).optional(),
+    /** Third-party name. Optional, 5-100 chars. */
+    nombreTercero: z.string().min(5).max(100).optional(),
 
-  /** Detail. Max 160 chars. */
-  detalle: z.string().min(1).max(160),
+    /** Detail. Max 160 chars. */
+    detalle: z.string().min(1).max(160),
 
-  /** Percentage (PorcentajeOC). Optional. */
-  porcentaje: z.number().min(0).max(100).optional(),
+    /** Percentage (PorcentajeOC). Optional. */
+    porcentaje: z.number().min(0).max(100).optional(),
 
-  /** Charge amount (MontoCargo). */
-  montoCargo: z.number().min(0),
-});
+    /** Charge amount (MontoCargo). */
+    montoCargo: z.number().min(0),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tipoDocumento === "99" && !data.tipoDocumentoOtros) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'tipoDocumentoOtros is required when tipoDocumento is "99"',
+        path: ["tipoDocumentoOtros"],
+      });
+    }
+    if (data.tipoDocumento === "04") {
+      if (!data.identificacionTercero) {
+        ctx.addIssue({
+          code: "custom",
+          message: 'identificacionTercero is required when tipoDocumento is "04"',
+          path: ["identificacionTercero"],
+        });
+      }
+      if (!data.nombreTercero) {
+        ctx.addIssue({
+          code: "custom",
+          message: 'nombreTercero is required when tipoDocumento is "04"',
+          path: ["nombreTercero"],
+        });
+      }
+    }
+  });
 
 /** Schema for a payment-method entry inside ResumenFactura (v4.4). */
 export const MedioPagoSchema = z.object({
@@ -175,8 +224,8 @@ export const OtroContenidoSchema = z.object({
   contenido: z.string().min(1),
 });
 
-/** Schema for a full Factura Electronica input, per the v4.4 XSD. */
-export const FacturaElectronicaSchema = z.object({
+/** Shared base fields for Factura Electronica and Tiquete Electronico. */
+const BaseDocumentoFields = {
   /** 50-character clave (taxpayer segment alphanumeric since April 2026). */
   clave: z
     .string()
@@ -213,13 +262,15 @@ export const FacturaElectronicaSchema = z.object({
   fechaEmision: z.string().min(1),
 
   /** Issuer information. */
-  emisor: EmisorSchema,
-
-  /** Receiver information. Required for Factura (with identification). */
-  receptor: ReceptorSchema.refine((r) => r.identificacion !== undefined, {
-    message: "Receptor identification is required for Factura Electronica",
-    path: ["identificacion"],
-  }),
+  emisor: EmisorSchema.refine(
+    (e) =>
+      e.identificacion.tipo !== IdentificationType.EXTRANJERO_NO_DOMICILIADO &&
+      e.identificacion.tipo !== IdentificationType.NO_CONTRIBUYENTE,
+    {
+      message: "Emisor identification type must be domestic (01-04)",
+      path: ["identificacion", "tipo"],
+    },
+  ),
 
   /** Sale condition (v4.4 set — REP-only payment codes excluded). */
   condicionVenta: SaleConditionSchema,
@@ -227,7 +278,7 @@ export const FacturaElectronicaSchema = z.object({
   /** Free-text sale condition. Required when condicionVenta is "99" (5-100 chars). */
   condicionVentaOtros: z.string().min(5).max(100).optional(),
 
-  /** Credit term in days. Required when condicionVenta is "02". */
+  /** Credit term in days. Required when condicionVenta is "02" or "10". */
   plazoCredito: z.string().optional(),
 
   /** Line items. At least one required, max 1000. */
@@ -244,6 +295,100 @@ export const FacturaElectronicaSchema = z.object({
 
   /** Additional content. Optional. */
   otros: z.array(OtroContenidoSchema).optional(),
+};
+
+function refineCommonDocumentFields(
+  data: {
+    condicionVenta: string;
+    plazoCredito?: string;
+    condicionVentaOtros?: string;
+    resumenFactura: { medioPago?: { tipoMedioPago: string; medioPagoOtros?: string }[] };
+    detalleServicio: { unidadMedida: string; unidadMedidaComercial?: string }[];
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    (data.condicionVenta === SaleCondition.CREDITO ||
+      data.condicionVenta === SaleCondition.VENTA_CREDITO_IVA_90_DIAS) &&
+    !data.plazoCredito
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: `plazoCredito is required when condicionVenta is "${data.condicionVenta}"`,
+      path: ["plazoCredito"],
+    });
+  }
+  if (data.condicionVenta === SaleCondition.OTROS && !data.condicionVentaOtros) {
+    ctx.addIssue({
+      code: "custom",
+      message: 'condicionVentaOtros is required when condicionVenta is "99"',
+      path: ["condicionVentaOtros"],
+    });
+  }
+  for (const [index, payment] of (data.resumenFactura.medioPago ?? []).entries()) {
+    if (payment.tipoMedioPago === PaymentMethod.OTROS && !payment.medioPagoOtros) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'medioPagoOtros is required when tipoMedioPago is "99"',
+        path: ["resumenFactura", "medioPago", index, "medioPagoOtros"],
+      });
+    }
+  }
+  for (const [index, line] of data.detalleServicio.entries()) {
+    if (line.unidadMedida === "Otros" && !line.unidadMedidaComercial?.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'unidadMedidaComercial is required when unidadMedida is "Otros"',
+        path: ["detalleServicio", index, "unidadMedidaComercial"],
+      });
+    }
+  }
+}
+
+/** Unrefined Factura Electronica object schema (for `.pick()`/`.omit()`). */
+export const BaseFacturaElectronicaSchema = z.object({
+  ...BaseDocumentoFields,
+  /** Receiver information. Required for Factura (with identification). */
+  receptor: ReceptorSchema.refine((r) => r.identificacion !== undefined, {
+    message: "Receptor identification is required for Factura Electronica",
+    path: ["identificacion"],
+  })
+    .refine((r) => r.identificacion?.tipo !== IdentificationType.NO_CONTRIBUYENTE, {
+      message:
+        "Receptor identification type '06' (No Contribuyente) is not valid for Factura Electronica; emit a Tiquete Electronico instead",
+      path: ["identificacion", "tipo"],
+    })
+    .refine((r) => r.identificacion?.tipo !== IdentificationType.EXTRANJERO_NO_DOMICILIADO, {
+      message:
+        "Receptor identification type '05' (Extranjero No Domiciliado) is only valid for suppliers in Factura Electronica de Compra (FEC)",
+      path: ["identificacion", "tipo"],
+    }),
 });
 
+/** Schema for a full Factura Electronica input, per the v4.4 XSD. */
+export const FacturaElectronicaSchema = BaseFacturaElectronicaSchema.superRefine(
+  refineCommonDocumentFields,
+);
+
 export type FacturaElectronicaInput = z.infer<typeof FacturaElectronicaSchema>;
+
+/** Schema for a Tiquete Electronico input, per the v4.4 XSD. */
+export const TiqueteElectronicoSchema = z
+  .object({
+    ...BaseDocumentoFields,
+    /** Receiver information. Must be omitted on Tiquete Electronico. */
+    receptor: ReceptorSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    refineCommonDocumentFields(data, ctx);
+    if (data.receptor !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Tiquete Electronico must not include receptor; emit a Factura Electronica instead",
+        path: ["receptor"],
+      });
+    }
+  });
+
+export type TiqueteElectronicoInput = z.infer<typeof TiqueteElectronicoSchema>;

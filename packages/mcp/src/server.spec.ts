@@ -934,7 +934,7 @@ describe("MCP Server", () => {
         name: string;
         lengths: number[];
       }[];
-      expect(idTypes.length).toBe(4);
+      expect(idTypes.length).toBe(6);
 
       // Check Cedula Fisica
       const fisica = idTypes.find((it) => it.code === "01");

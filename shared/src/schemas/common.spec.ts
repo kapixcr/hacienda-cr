@@ -10,6 +10,7 @@ import {
   ExonerationTypeSchema,
   PaymentMethodSchema,
   SaleConditionSchema,
+  UbicacionSchema,
 } from "./common.js";
 
 describe("Catalog schemas", () => {
@@ -41,5 +42,34 @@ describe("Catalog schemas", () => {
     expect([...SaleConditionSchema.options, ...REP_SALE_CONDITIONS].sort()).toEqual(
       Object.values(SaleCondition).sort(),
     );
+  });
+
+  it("should validate ubicacion against the official province/canton/distrito catalog", () => {
+    expect(
+      UbicacionSchema.safeParse({
+        provincia: "1",
+        canton: "01",
+        distrito: "01",
+        otrasSenas: "San Jose centro, avenida central",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      UbicacionSchema.safeParse({
+        provincia: "1",
+        canton: "99",
+        distrito: "01",
+        otrasSenas: "San Jose centro, avenida central",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      UbicacionSchema.safeParse({
+        provincia: "1",
+        canton: "01",
+        distrito: "99",
+        otrasSenas: "San Jose centro, avenida central",
+      }).success,
+    ).toBe(false);
   });
 });

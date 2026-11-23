@@ -6,8 +6,17 @@ export { buildXml, getNamespaceUri, getSchemaFragment, type BuildXmlOptions } fr
 
 export {
   validateFacturaInput,
+  validateTiqueteInput,
+  validateNotaCreditoInput,
+  validateNotaDebitoInput,
+  validateMensajeReceptorInput,
+  validateReciboPagoInput,
+  validateFacturaCompraInput,
+  validateFacturaExportacionInput,
   type FacturaValidationError,
   type FacturaValidationResult,
+  type NotaCreditoValidationOptions,
+  type NotaDebitoValidationOptions,
 } from "./validator.js";
 
 export { validateDocumentXml, type DocumentXmlValidationResult } from "./schema-validator.js";

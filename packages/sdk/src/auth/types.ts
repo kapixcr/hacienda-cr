@@ -54,9 +54,9 @@ const LegacyCredentialInputSchema = z.object({
   /** Identification number (cedula). */
   idNumber: z
     .string()
-    .min(9, "Identification number must be at least 9 digits.")
-    .max(12, "Identification number must be at most 12 digits.")
-    .regex(/^\d+$/, "Identification number must contain only digits."),
+    .min(9, "Identification number must be at least 9 characters.")
+    .max(12, "Identification number must be at most 12 characters.")
+    .regex(/^[A-Za-z0-9]+$/, "Identification number must contain only letters and digits."),
   /** Password for the Hacienda IDP. */
   password: z.string().min(1, "Password is required."),
   /** Optional path to .p12 certificate file (used for signing, not auth). */
@@ -72,12 +72,27 @@ export const IdpUsernameSchema = z
   .regex(/^\S+$/, "IDP username must not contain whitespace.");
 
 /** Accept an issued username, or the legacy identification-based credentials. */
-export const CredentialInputSchema = z.union([
-  LegacyCredentialInputSchema.extend({ username: z.undefined().optional() }),
-  LegacyCredentialInputSchema.partial({ idType: true, idNumber: true }).extend({
-    username: IdpUsernameSchema,
-  }),
-]);
+export const CredentialInputSchema = z
+  .union([
+    LegacyCredentialInputSchema.extend({ username: z.undefined().optional() }),
+    LegacyCredentialInputSchema.partial({ idType: true, idNumber: true }).extend({
+      username: IdpUsernameSchema,
+    }),
+  ])
+  .superRefine((data, ctx) => {
+    if (
+      data.idNumber !== undefined &&
+      data.idType !== undefined &&
+      data.idType !== IdType.PersonaJuridica &&
+      !/^\d+$/.test(data.idNumber)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Identification number must contain only digits.",
+        path: ["idNumber"],
+      });
+    }
+  });
 
 /** Validated credential input. */
 export type CredentialInput = z.infer<typeof CredentialInputSchema>;

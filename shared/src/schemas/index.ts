@@ -61,7 +61,9 @@ export {
   ResumenFacturaSchema,
   OtroContenidoSchema,
   FacturaElectronicaSchema,
+  TiqueteElectronicoSchema,
   type FacturaElectronicaInput,
+  type TiqueteElectronicoInput,
 } from "./factura.js";
 
 export {

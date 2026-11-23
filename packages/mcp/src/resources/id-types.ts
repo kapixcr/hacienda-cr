@@ -51,11 +51,27 @@ const ID_TYPES_REFERENCE = {
         "(Numero de Identificacion Tributaria Especial). 10-digit number.",
       example: "1234567890",
     },
+    {
+      code: IdentificationType.EXTRANJERO_NO_DOMICILIADO,
+      name: IDENTIFICATION_TYPE_NAMES[IdentificationType.EXTRANJERO_NO_DOMICILIADO],
+      lengths: IDENTIFICATION_LENGTHS[IdentificationType.EXTRANJERO_NO_DOMICILIADO] ?? [],
+      description:
+        "Non-domiciled foreign taxpayer identification. Free-form string up to 20 characters.",
+      example: "US123456789",
+    },
+    {
+      code: IdentificationType.NO_CONTRIBUYENTE,
+      name: IDENTIFICATION_TYPE_NAMES[IdentificationType.NO_CONTRIBUYENTE],
+      lengths: IDENTIFICATION_LENGTHS[IdentificationType.NO_CONTRIBUYENTE] ?? [],
+      description: "Non-taxpayer identification. Free-form string up to 20 characters.",
+      example: "NC000001",
+    },
   ],
   notes: {
     formatting:
-      "Identification numbers must contain only digits, no dashes or spaces. " +
-      "The number must match the expected length for the given type.",
+      "Domestic types 01, 03, and 04 must contain only digits and match their expected lengths; " +
+      "type 02 (Cedula Juridica) accepts 10 alphanumeric characters; types 05 and 06 accept " +
+      "free-form strings up to 20 characters. No dashes or spaces.",
     usage:
       "The emisor (issuer) always requires identification. " +
       "The receptor (receiver) identification is required for Factura Electronica " +

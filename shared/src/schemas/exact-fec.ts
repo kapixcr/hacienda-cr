@@ -1,6 +1,6 @@
 /** First named ordinary domestic purchase source; no supplier-eligibility oracle. */
 import { z } from "zod";
-import { FacturaElectronicaSchema } from "./factura.js";
+import { BaseFacturaElectronicaSchema } from "./factura.js";
 import { EmisorSchema } from "./emisor.js";
 import { ReceptorSchema } from "./receptor.js";
 import { IdentificacionSchema } from "./identification.js";
@@ -40,7 +40,7 @@ export const ExactFecReferenceSchema = z
         message: "Other-document description is required only for reference 99",
       });
   });
-export const ExactFecInputSchema = FacturaElectronicaSchema.pick({
+export const ExactFecInputSchema = BaseFacturaElectronicaSchema.pick({
   clave: true,
   proveedorSistemas: true,
   numeroConsecutivo: true,

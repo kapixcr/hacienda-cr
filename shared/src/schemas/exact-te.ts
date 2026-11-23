@@ -1,7 +1,7 @@
 /** Additive ordinary domestic TE; no fictitious receiver or FE producer input. */
 import { z } from "zod";
 import { exactPartyName } from "./exact-party-name.js";
-import { FacturaElectronicaSchema } from "./factura.js";
+import { BaseFacturaElectronicaSchema } from "./factura.js";
 import { EmisorSchema } from "./emisor.js";
 import { ReceptorSchema } from "./receptor.js";
 import { IdentificacionSchema } from "./identification.js";
@@ -15,7 +15,7 @@ import {
 const domesticIdentity = IdentificacionSchema.safeExtend({
   tipo: z.enum(["01", "02", "03", "04"]),
 }).strict();
-export const ExactTeInputSchema = FacturaElectronicaSchema.pick({
+export const ExactTeInputSchema = BaseFacturaElectronicaSchema.pick({
   clave: true,
   proveedorSistemas: true,
   codigoActividadEmisor: true,

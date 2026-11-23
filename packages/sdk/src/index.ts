@@ -121,11 +121,20 @@ export {
   getNamespaceUri,
   getSchemaFragment,
   validateFacturaInput,
+  validateTiqueteInput,
+  validateNotaCreditoInput,
+  validateNotaDebitoInput,
+  validateMensajeReceptorInput,
+  validateReciboPagoInput,
+  validateFacturaCompraInput,
+  validateFacturaExportacionInput,
   validateDocumentXml,
   type DocumentXmlValidationResult,
   type BuildXmlOptions,
   type FacturaValidationError,
   type FacturaValidationResult,
+  type NotaCreditoValidationOptions,
+  type NotaDebitoValidationOptions,
 } from "./xml/index.js";
 
 // Tax calculation module

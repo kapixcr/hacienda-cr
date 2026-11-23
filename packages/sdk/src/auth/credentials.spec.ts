@@ -143,7 +143,7 @@ describe("loadCredentials", () => {
     ).toThrow(AuthError);
   });
 
-  it("throws AuthError on non-numeric identification number", () => {
+  it("throws AuthError on non-numeric identification number for PersonaFisica", () => {
     expect(() =>
       loadCredentials({
         idType: IdType.PersonaFisica,
@@ -151,6 +151,15 @@ describe("loadCredentials", () => {
         password: "pass",
       }),
     ).toThrow(AuthError);
+  });
+
+  it("allows alphanumeric identification number for PersonaJuridica", () => {
+    const creds = loadCredentials({
+      idType: IdType.PersonaJuridica,
+      idNumber: "31012345AB",
+      password: "pass",
+    });
+    expect(creds.username).toBe("cpj-02-31012345AB");
   });
 
   it("throws AuthError when .p12 file does not exist", () => {

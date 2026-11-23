@@ -3,7 +3,27 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { validateFacturaInput } from "./validator.js";
+import {
+  validateFacturaInput,
+  validateTiqueteInput,
+  validateNotaCreditoInput,
+  validateNotaDebitoInput,
+  validateMensajeReceptorInput,
+  validateReciboPagoInput,
+  validateFacturaCompraInput,
+  validateFacturaExportacionInput,
+} from "./validator.js";
+import {
+  SIMPLE_TIQUETE,
+  TIQUETE_WITH_RECEPTOR,
+  MENSAJE_ACEPTACION_TOTAL,
+  MENSAJE_ACEPTACION_PARCIAL,
+  MENSAJE_RECHAZO,
+  MENSAJE_MINIMAL,
+  SIMPLE_RECIBO_PAGO,
+  SIMPLE_FACTURA_COMPRA,
+  SIMPLE_FACTURA_EXPORTACION,
+} from "../__fixtures__/document-fixtures.js";
 import {
   SIMPLE_INVOICE,
   MULTI_ITEM_INVOICE,
@@ -34,7 +54,6 @@ describe("validateFacturaInput — valid inputs", () => {
     ["MULTI_ITEM_INVOICE", MULTI_ITEM_INVOICE],
     ["DISCOUNT_INVOICE", DISCOUNT_INVOICE],
     ["EXONERATED_INVOICE", EXONERATED_INVOICE],
-    ["EXPORT_INVOICE", EXPORT_INVOICE],
     ["CREDIT_INVOICE", CREDIT_INVOICE],
     ["REFERENCE_INVOICE", REFERENCE_INVOICE],
   ] as const)("%s should be valid", (_name, fixture) => {
@@ -501,7 +520,7 @@ describe("validateFacturaInput — business rules", () => {
       ...SIMPLE_INVOICE,
       otrosCargos: [
         {
-          tipoDocumento: "04" as const,
+          tipoDocumento: "02" as const,
           detalle: "Timbre de ley",
           montoCargo: 500,
         },
@@ -610,6 +629,7 @@ describe("validateFacturaInput — optional summary totals", () => {
     const { totalExento: _, ...resumen } = EXPORT_INVOICE.resumenFactura;
     const result = validateFacturaInput({
       ...EXPORT_INVOICE,
+      receptor: SIMPLE_INVOICE.receptor,
       resumenFactura: resumen,
     });
     expect(result.errors.some((e) => e.path === "resumenFactura.totalExento")).toBe(false);
@@ -655,7 +675,10 @@ describe("validateFacturaInput — optional summary totals", () => {
 
 describe("validateFacturaInput — edge cases", () => {
   it("should accept an invoice with 0% exempt tax (export)", () => {
-    const result = validateFacturaInput(EXPORT_INVOICE);
+    const result = validateFacturaInput({
+      ...EXPORT_INVOICE,
+      receptor: SIMPLE_INVOICE.receptor,
+    });
     expect(result.valid).toBe(true);
   });
 
@@ -748,5 +771,521 @@ describe("summary reconciliation regressions", () => {
         (issue) => issue.path === "resumenFactura.totalOtrosCargos",
       ),
     ).toBe(true);
+  });
+
+  it("rejects receptor identification type 06 (No Contribuyente) on Factura Electronica", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    invoice.receptor.identificacion = {
+      tipo: "06",
+      numero: "NC123456",
+    };
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "receptor.identificacion.tipo")).toBe(true);
+  });
+
+  it("rejects receptor identification type 05 (Extranjero No Domiciliado) on Factura Electronica", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    invoice.receptor.identificacion = {
+      tipo: "05",
+      numero: "US123456789",
+    };
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "receptor.identificacion.tipo")).toBe(true);
+  });
+
+  it.each(["05", "06"] as const)(
+    "rejects non-domestic emisor identification type %s on Factura Electronica",
+    (tipo) => {
+      const invoice = structuredClone(SIMPLE_INVOICE);
+      invoice.emisor.identificacion = {
+        tipo,
+        numero: "EXT123456",
+      };
+      const result = validateFacturaInput(invoice);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((issue) => issue.path === "emisor.identificacion.tipo")).toBe(true);
+    },
+  );
+
+  it.each(["02", "10"] as const)(
+    "rejects condicionVenta %s without plazoCredito",
+    (condicionVenta) => {
+      const invoice = structuredClone(SIMPLE_INVOICE);
+      invoice.condicionVenta = condicionVenta;
+      delete invoice.plazoCredito;
+      const result = validateFacturaInput(invoice);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((issue) => issue.path === "plazoCredito")).toBe(true);
+    },
+  );
+
+  it("rejects condicionVenta 99 without condicionVentaOtros", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    invoice.condicionVenta = "99";
+    delete invoice.condicionVentaOtros;
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "condicionVentaOtros")).toBe(true);
+  });
+
+  it("rejects tipoMedioPago 99 without medioPagoOtros", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    invoice.resumenFactura.medioPago = [
+      { tipoMedioPago: "99", totalMedioPago: invoice.resumenFactura.totalComprobante },
+    ];
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((issue) => issue.path === "resumenFactura.medioPago.0.medioPagoOtros"),
+    ).toBe(true);
+  });
+
+  it("rejects Contado (01) when sum of totalMedioPago does not equal totalComprobante", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    invoice.condicionVenta = "01";
+    invoice.resumenFactura.medioPago = [{ tipoMedioPago: "01", totalMedioPago: 1000 }];
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "resumenFactura.medioPago")).toBe(true);
+  });
+
+  it("rejects unidadMedida Otros without unidadMedidaComercial", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    firstLineItem(invoice).unidadMedida = "Otros";
+    delete firstLineItem(invoice).unidadMedidaComercial;
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((issue) => issue.path === "detalleServicio.0.unidadMedidaComercial"),
+    ).toBe(true);
+  });
+
+  it("rejects otrosCargos 99 without tipoDocumentoOtros and 04 without third-party fields", () => {
+    const invoice99 = structuredClone(SIMPLE_INVOICE);
+    invoice99.otrosCargos = [{ tipoDocumento: "99", detalle: "Otro", montoCargo: 100 }];
+    invoice99.resumenFactura.totalOtrosCargos = 100;
+    invoice99.resumenFactura.totalComprobante += 100;
+    const res99 = validateFacturaInput(invoice99);
+    expect(res99.valid).toBe(false);
+    expect(res99.errors.some((issue) => issue.path === "otrosCargos.0.tipoDocumentoOtros")).toBe(
+      true,
+    );
+
+    const invoice04 = structuredClone(SIMPLE_INVOICE);
+    invoice04.otrosCargos = [{ tipoDocumento: "04", detalle: "Cobro tercero", montoCargo: 100 }];
+    invoice04.resumenFactura.totalOtrosCargos = 100;
+    invoice04.resumenFactura.totalComprobante += 100;
+    const res04 = validateFacturaInput(invoice04);
+    expect(res04.valid).toBe(false);
+    expect(res04.errors.some((issue) => issue.path === "otrosCargos.0.identificacionTercero")).toBe(
+      true,
+    );
+    expect(res04.errors.some((issue) => issue.path === "otrosCargos.0.nombreTercero")).toBe(true);
+  });
+
+  it("rejects line discounts exceeding montoTotal", () => {
+    const invoice = structuredClone(SIMPLE_INVOICE);
+    const line = firstLineItem(invoice);
+    line.descuento = [
+      {
+        montoDescuento: line.montoTotal + 1000,
+        codigoDescuento: "04",
+        naturalezaDescuento: "Excede monto",
+      },
+    ];
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "detalleServicio.0.descuento")).toBe(true);
+  });
+
+  it("rejects exoneration exceeding tax tarifa or monto", () => {
+    const invoice = structuredClone(EXONERATED_INVOICE);
+    const firstTax = firstLineItem(invoice).impuesto[0];
+    if (firstTax?.exoneracion) {
+      firstTax.exoneracion.tarifaExonerada = 20;
+      firstTax.exoneracion.montoExoneracion = firstTax.monto + 1000;
+    }
+    const result = validateFacturaInput(invoice);
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (issue) => issue.path === "detalleServicio.0.impuesto.0.exoneracion.tarifaExonerada",
+      ),
+    ).toBe(true);
+    expect(
+      result.errors.some(
+        (issue) => issue.path === "detalleServicio.0.impuesto.0.exoneracion.montoExoneracion",
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("validateNotaCreditoInput", () => {
+  it("accepts NC referencing FE (01), ND (02), or TE (04) within original amount", () => {
+    for (const tipoDoc of ["01", "02", "04"] as const) {
+      const nc = structuredClone(REFERENCE_INVOICE);
+      nc.clave = nc.clave.slice(0, 29) + "03" + nc.clave.slice(31);
+      nc.numeroConsecutivo =
+        nc.numeroConsecutivo.slice(0, 8) + "03" + nc.numeroConsecutivo.slice(10);
+      nc.informacionReferencia = [
+        {
+          tipoDoc,
+          numero: SIMPLE_INVOICE.clave,
+          fechaEmision: SIMPLE_INVOICE.fechaEmision,
+          codigo: "02",
+          razon: "Ajuste parcial de monto",
+        },
+      ];
+      const result = validateNotaCreditoInput(nc, {
+        originalTotalComprobante: nc.resumenFactura.totalComprobante + 5000,
+        originalClave: SIMPLE_INVOICE.clave,
+      });
+      expect(result.valid).toBe(true);
+    }
+  });
+
+  it("rejects NC when totalComprobante exceeds originalTotalComprobante", () => {
+    const nc = structuredClone(REFERENCE_INVOICE);
+    nc.clave = nc.clave.slice(0, 29) + "03" + nc.clave.slice(31);
+    nc.numeroConsecutivo = nc.numeroConsecutivo.slice(0, 8) + "03" + nc.numeroConsecutivo.slice(10);
+    nc.resumenFactura.totalComprobante = 15000;
+    const result = validateNotaCreditoInput(nc, {
+      originalTotalComprobante: 10000,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "resumenFactura.totalComprobante")).toBe(
+      true,
+    );
+  });
+
+  it("rejects NC referencing unsupported document type (e.g. 03)", () => {
+    const nc = structuredClone(REFERENCE_INVOICE);
+    nc.clave = nc.clave.slice(0, 29) + "03" + nc.clave.slice(31);
+    nc.numeroConsecutivo = nc.numeroConsecutivo.slice(0, 8) + "03" + nc.numeroConsecutivo.slice(10);
+    nc.informacionReferencia = [
+      {
+        tipoDoc: "03",
+        numero: SIMPLE_INVOICE.clave,
+        fechaEmision: SIMPLE_INVOICE.fechaEmision,
+        codigo: "01",
+        razon: "Anulacion",
+      },
+    ];
+    const result = validateNotaCreditoInput(nc);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "informacionReferencia.0.tipoDoc")).toBe(
+      true,
+    );
+  });
+});
+
+describe("validateTiqueteInput", () => {
+  it("accepts a Tiquete without receptor", () => {
+    expect(validateTiqueteInput(SIMPLE_TIQUETE).valid).toBe(true);
+  });
+
+  it("rejects a Tiquete when receptor is provided", () => {
+    const result = validateTiqueteInput(TIQUETE_WITH_RECEPTOR);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "receptor")).toBe(true);
+  });
+});
+
+describe("validateMensajeReceptorInput", () => {
+  it("accepts all standard MensajeReceptor fixtures", () => {
+    for (const fixture of [
+      MENSAJE_ACEPTACION_TOTAL,
+      MENSAJE_ACEPTACION_PARCIAL,
+      MENSAJE_RECHAZO,
+      MENSAJE_MINIMAL,
+    ]) {
+      expect(validateMensajeReceptorInput(fixture).valid).toBe(true);
+    }
+  });
+
+  it("rejects mismatch between mensaje and numeroConsecutivoReceptor kind", () => {
+    const bad = { ...MENSAJE_RECHAZO, numeroConsecutivoReceptor: "00100001050000000001" };
+    const result = validateMensajeReceptorInput(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "numeroConsecutivoReceptor")).toBe(true);
+  });
+
+  it("rejects partial acceptance or rejection without detalleMensaje", () => {
+    const { detalleMensaje: _, ...noReason } = MENSAJE_ACEPTACION_PARCIAL;
+    const result = validateMensajeReceptorInput(noReason);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "detalleMensaje")).toBe(true);
+  });
+
+  it("rejects montoTotalImpuestoAcreditar exceeding montoTotalImpuesto", () => {
+    const bad = { ...MENSAJE_ACEPTACION_TOTAL, montoTotalImpuestoAcreditar: 15000 };
+    const result = validateMensajeReceptorInput(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "montoTotalImpuestoAcreditar")).toBe(true);
+  });
+});
+
+describe("validateReciboPagoInput", () => {
+  it("accepts standard ReciboElectronicoPago fixture", () => {
+    expect(validateReciboPagoInput(SIMPLE_RECIBO_PAGO).valid).toBe(true);
+  });
+
+  it("rejects non-REP condicionVenta (e.g. 01)", () => {
+    const bad = { ...SIMPLE_RECIBO_PAGO, condicionVenta: "01" as const };
+    const result = validateReciboPagoInput(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "condicionVenta")).toBe(true);
+  });
+
+  it("rejects REP without informacionReferencia", () => {
+    const { informacionReferencia: _, ...noRef } = SIMPLE_RECIBO_PAGO;
+    const result = validateReciboPagoInput(noRef);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "informacionReferencia")).toBe(true);
+  });
+});
+
+describe("validateFacturaCompraInput", () => {
+  it("accepts standard FacturaElectronicaCompra fixture and supplier type 05/06", () => {
+    expect(validateFacturaCompraInput(SIMPLE_FACTURA_COMPRA).valid).toBe(true);
+
+    for (const tipo of ["05", "06"] as const) {
+      const fec = structuredClone(SIMPLE_FACTURA_COMPRA);
+      fec.emisor.identificacion = { tipo, numero: "EXT123456" };
+      expect(validateFacturaCompraInput(fec).valid).toBe(true);
+    }
+  });
+
+  it("rejects FEC without informacionReferencia", () => {
+    const { informacionReferencia: _, ...noRef } = SIMPLE_FACTURA_COMPRA;
+    const result = validateFacturaCompraInput(noRef);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "informacionReferencia")).toBe(true);
+  });
+
+  it("rejects non-domestic receptor type 05/06 on FEC", () => {
+    for (const tipo of ["05", "06"] as const) {
+      const fec = structuredClone(SIMPLE_FACTURA_COMPRA);
+      if (fec.receptor) {
+        fec.receptor.identificacion = { tipo, numero: "EXT123456" };
+      }
+      const result = validateFacturaCompraInput(fec);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((issue) => issue.path === "receptor.identificacion.tipo")).toBe(
+        true,
+      );
+    }
+  });
+});
+
+describe("validateFacturaExportacionInput", () => {
+  it("accepts standard FacturaElectronicaExportacion fixture with foreign buyer 05", () => {
+    expect(validateFacturaExportacionInput(SIMPLE_FACTURA_EXPORTACION).valid).toBe(true);
+  });
+
+  it("rejects FEE with receptor type 06 or non-domestic emisor", () => {
+    const badReceptor = structuredClone(SIMPLE_FACTURA_EXPORTACION);
+    if (badReceptor.receptor) {
+      badReceptor.receptor.identificacion = { tipo: "06", numero: "NC123456" };
+    }
+    const resReceptor = validateFacturaExportacionInput(badReceptor);
+    expect(resReceptor.valid).toBe(false);
+    expect(resReceptor.errors.some((issue) => issue.path === "receptor.identificacion.tipo")).toBe(
+      true,
+    );
+
+    const badEmisor = structuredClone(SIMPLE_FACTURA_EXPORTACION);
+    badEmisor.emisor.identificacion = { tipo: "05", numero: "EXT123456" };
+    const resEmisor = validateFacturaExportacionInput(badEmisor);
+    expect(resEmisor.valid).toBe(false);
+    expect(resEmisor.errors.some((issue) => issue.path === "emisor.identificacion.tipo")).toBe(
+      true,
+    );
+  });
+});
+
+describe("validateNotaDebitoInput", () => {
+  it("accepts ND referencing FE (01), NC (03), or TE (04) within original amount", () => {
+    for (const tipoDoc of ["01", "03", "04"] as const) {
+      const nd = structuredClone(REFERENCE_INVOICE);
+      nd.clave = nd.clave.slice(0, 29) + "02" + nd.clave.slice(31);
+      nd.numeroConsecutivo =
+        nd.numeroConsecutivo.slice(0, 8) + "02" + nd.numeroConsecutivo.slice(10);
+      nd.informacionReferencia = [
+        {
+          tipoDoc,
+          numero: SIMPLE_INVOICE.clave,
+          fechaEmision: SIMPLE_INVOICE.fechaEmision,
+          codigo: "02",
+          razon: "Ajuste de debito",
+        },
+      ];
+      const result = validateNotaDebitoInput(nd, {
+        originalTotalComprobante: nd.resumenFactura.totalComprobante + 5000,
+        originalClave: SIMPLE_INVOICE.clave,
+      });
+      expect(result.valid).toBe(true);
+    }
+  });
+
+  it("rejects ND when totalComprobante exceeds originalTotalComprobante", () => {
+    const nd = structuredClone(REFERENCE_INVOICE);
+    nd.clave = nd.clave.slice(0, 29) + "02" + nd.clave.slice(31);
+    nd.numeroConsecutivo = nd.numeroConsecutivo.slice(0, 8) + "02" + nd.numeroConsecutivo.slice(10);
+    nd.resumenFactura.totalComprobante = 15000;
+    const result = validateNotaDebitoInput(nd, {
+      originalTotalComprobante: 10000,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "resumenFactura.totalComprobante")).toBe(
+      true,
+    );
+  });
+
+  it("rejects ND referencing unsupported document type (e.g. 02)", () => {
+    const nd = structuredClone(REFERENCE_INVOICE);
+    nd.clave = nd.clave.slice(0, 29) + "02" + nd.clave.slice(31);
+    nd.numeroConsecutivo = nd.numeroConsecutivo.slice(0, 8) + "02" + nd.numeroConsecutivo.slice(10);
+    nd.informacionReferencia = [
+      {
+        tipoDoc: "02",
+        numero: SIMPLE_INVOICE.clave,
+        fechaEmision: SIMPLE_INVOICE.fechaEmision,
+        codigo: "01",
+        razon: "Anulacion",
+      },
+    ];
+    const result = validateNotaDebitoInput(nd);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "informacionReferencia.0.tipoDoc")).toBe(
+      true,
+    );
+  });
+});
+
+describe("validateTiqueteInput", () => {
+  it("accepts a Tiquete without receptor", () => {
+    expect(validateTiqueteInput(SIMPLE_TIQUETE).valid).toBe(true);
+  });
+
+  it("rejects a Tiquete when receptor is provided", () => {
+    const result = validateTiqueteInput(TIQUETE_WITH_RECEPTOR);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "receptor")).toBe(true);
+  });
+});
+
+describe("validateMensajeReceptorInput", () => {
+  it("accepts all standard MensajeReceptor fixtures", () => {
+    for (const fixture of [
+      MENSAJE_ACEPTACION_TOTAL,
+      MENSAJE_ACEPTACION_PARCIAL,
+      MENSAJE_RECHAZO,
+      MENSAJE_MINIMAL,
+    ]) {
+      expect(validateMensajeReceptorInput(fixture).valid).toBe(true);
+    }
+  });
+
+  it("rejects mismatch between mensaje and numeroConsecutivoReceptor kind", () => {
+    const bad = { ...MENSAJE_RECHAZO, numeroConsecutivoReceptor: "00100001050000000001" };
+    const result = validateMensajeReceptorInput(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "numeroConsecutivoReceptor")).toBe(true);
+  });
+
+  it("rejects partial acceptance or rejection without detalleMensaje", () => {
+    const { detalleMensaje: _, ...noReason } = MENSAJE_ACEPTACION_PARCIAL;
+    const result = validateMensajeReceptorInput(noReason);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "detalleMensaje")).toBe(true);
+  });
+
+  it("rejects montoTotalImpuestoAcreditar exceeding montoTotalImpuesto", () => {
+    const bad = { ...MENSAJE_ACEPTACION_TOTAL, montoTotalImpuestoAcreditar: 15000 };
+    const result = validateMensajeReceptorInput(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "montoTotalImpuestoAcreditar")).toBe(true);
+  });
+});
+
+describe("validateReciboPagoInput", () => {
+  it("accepts standard ReciboElectronicoPago fixture", () => {
+    expect(validateReciboPagoInput(SIMPLE_RECIBO_PAGO).valid).toBe(true);
+  });
+
+  it("rejects non-REP condicionVenta (e.g. 01)", () => {
+    const bad = { ...SIMPLE_RECIBO_PAGO, condicionVenta: "01" as const };
+    const result = validateReciboPagoInput(bad);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "condicionVenta")).toBe(true);
+  });
+
+  it("rejects REP without informacionReferencia", () => {
+    const { informacionReferencia: _, ...noRef } = SIMPLE_RECIBO_PAGO;
+    const result = validateReciboPagoInput(noRef);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "informacionReferencia")).toBe(true);
+  });
+});
+
+describe("validateFacturaCompraInput", () => {
+  it("accepts standard FacturaElectronicaCompra fixture and supplier type 05/06", () => {
+    expect(validateFacturaCompraInput(SIMPLE_FACTURA_COMPRA).valid).toBe(true);
+
+    for (const tipo of ["05", "06"] as const) {
+      const fec = structuredClone(SIMPLE_FACTURA_COMPRA);
+      fec.emisor.identificacion = { tipo, numero: "EXT123456" };
+      expect(validateFacturaCompraInput(fec).valid).toBe(true);
+    }
+  });
+
+  it("rejects FEC without informacionReferencia", () => {
+    const { informacionReferencia: _, ...noRef } = SIMPLE_FACTURA_COMPRA;
+    const result = validateFacturaCompraInput(noRef);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((issue) => issue.path === "informacionReferencia")).toBe(true);
+  });
+
+  it("rejects non-domestic receptor type 05/06 on FEC", () => {
+    for (const tipo of ["05", "06"] as const) {
+      const fec = structuredClone(SIMPLE_FACTURA_COMPRA);
+      if (fec.receptor) {
+        fec.receptor.identificacion = { tipo, numero: "EXT123456" };
+      }
+      const result = validateFacturaCompraInput(fec);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((issue) => issue.path === "receptor.identificacion.tipo")).toBe(
+        true,
+      );
+    }
+  });
+});
+
+describe("validateFacturaExportacionInput", () => {
+  it("accepts standard FacturaElectronicaExportacion fixture with foreign buyer 05", () => {
+    expect(validateFacturaExportacionInput(SIMPLE_FACTURA_EXPORTACION).valid).toBe(true);
+  });
+
+  it("rejects FEE with receptor type 06 or non-domestic emisor", () => {
+    const badReceptor = structuredClone(SIMPLE_FACTURA_EXPORTACION);
+    if (badReceptor.receptor) {
+      badReceptor.receptor.identificacion = { tipo: "06", numero: "NC123456" };
+    }
+    const resReceptor = validateFacturaExportacionInput(badReceptor);
+    expect(resReceptor.valid).toBe(false);
+    expect(resReceptor.errors.some((issue) => issue.path === "receptor.identificacion.tipo")).toBe(
+      true,
+    );
+
+    const badEmisor = structuredClone(SIMPLE_FACTURA_EXPORTACION);
+    badEmisor.emisor.identificacion = { tipo: "05", numero: "EXT123456" };
+    const resEmisor = validateFacturaExportacionInput(badEmisor);
+    expect(resEmisor.valid).toBe(false);
+    expect(resEmisor.errors.some((issue) => issue.path === "emisor.identificacion.tipo")).toBe(
+      true,
+    );
   });
 });

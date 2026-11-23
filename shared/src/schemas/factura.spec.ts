@@ -120,8 +120,19 @@ describe("FacturaElectronicaSchema", () => {
       const result = FacturaElectronicaSchema.safeParse({
         ...validFactura,
         condicionVenta,
+        ...(condicionVenta === "10" ? { plazoCredito: "30" } : {}),
       });
       expect(result.success).toBe(true);
+    }
+  });
+
+  it("should reject condicionVenta 02 or 10 without plazoCredito", () => {
+    for (const condicionVenta of ["02", "10"]) {
+      const result = FacturaElectronicaSchema.safeParse({
+        ...validFactura,
+        condicionVenta,
+      });
+      expect(result.success).toBe(false);
     }
   });
 
@@ -132,6 +143,65 @@ describe("FacturaElectronicaSchema", () => {
       condicionVentaOtros: "Pago por adelantado parcial",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("should reject condicionVenta 99 without condicionVentaOtros", () => {
+    const result = FacturaElectronicaSchema.safeParse({
+      ...validFactura,
+      condicionVenta: "99",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("should reject tipoMedioPago 99 without medioPagoOtros", () => {
+    const result = FacturaElectronicaSchema.safeParse({
+      ...validFactura,
+      resumenFactura: {
+        ...validFactura.resumenFactura,
+        medioPago: [{ tipoMedioPago: "99", totalMedioPago: 113000 }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("should reject InformacionReferencia tipoDoc 99 without tipoDocOtros and codigo 99 without codigoOtros", () => {
+    const noTipoDocOtros = FacturaElectronicaSchema.safeParse({
+      ...validFactura,
+      informacionReferencia: [
+        {
+          tipoDoc: "99",
+          fechaEmision: "2025-07-20T10:30:00-06:00",
+          codigo: "04",
+          razon: "Referencia",
+        },
+      ],
+    });
+    expect(noTipoDocOtros.success).toBe(false);
+
+    const noCodigoOtros = FacturaElectronicaSchema.safeParse({
+      ...validFactura,
+      informacionReferencia: [
+        {
+          tipoDoc: "01",
+          numero: "50601072500012345678900100001010000000001199999998",
+          fechaEmision: "2025-07-20T10:30:00-06:00",
+          codigo: "99",
+          razon: "Otro motivo",
+        },
+      ],
+    });
+    expect(noCodigoOtros.success).toBe(false);
+  });
+
+  it("should reject unidadMedida Otros without unidadMedidaComercial", () => {
+    const firstLine = validFactura.detalleServicio[0];
+    expect(firstLine).toBeDefined();
+    if (!firstLine) return;
+    const result = FacturaElectronicaSchema.safeParse({
+      ...validFactura,
+      detalleServicio: [{ ...firstLine, unidadMedida: "Otros" }],
+    });
+    expect(result.success).toBe(false);
   });
 
   it("should accept a factura with reference information", () => {
@@ -524,6 +594,30 @@ describe("OtroCargoSchema", () => {
       tipoDocumentoOtros: "Cargo especial",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("should reject tipoDocumento 99 without tipoDocumentoOtros", () => {
+    const result = OtroCargoSchema.safeParse({
+      ...validCargo,
+      tipoDocumento: "99",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("should reject tipoDocumento 04 without identificacionTercero or nombreTercero", () => {
+    const missingId = OtroCargoSchema.safeParse({
+      ...validCargo,
+      tipoDocumento: "04",
+      nombreTercero: "Tercero S.A.",
+    });
+    expect(missingId.success).toBe(false);
+
+    const missingName = OtroCargoSchema.safeParse({
+      ...validCargo,
+      tipoDocumento: "04",
+      identificacionTercero: { tipo: "02", numero: "3101234567" },
+    });
+    expect(missingName.success).toBe(false);
   });
 
   it("should reject an unknown charge type", () => {

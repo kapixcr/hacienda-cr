@@ -92,6 +92,9 @@ export interface LineItemTaxInput {
   /** Tax type code (e.g., "01" for IVA). */
   codigo: string;
 
+  /** Free-text tax type. Required when codigo is "99" (5-100 chars). */
+  codigoImpuestoOtros?: string;
+
   /** IVA rate code (CodigoTarifaIVA). Required for IVA taxes. */
   codigoTarifaIVA?: string;
 
@@ -107,10 +110,18 @@ export interface LineItemTaxInput {
   exoneracion?: {
     /** Exoneration document type (TipoDocumentoEX1). */
     tipoDocumento: string;
+    /** Free-text document type. Required when tipoDocumento is "99". */
+    tipoDocumentoOtros?: string;
     /** Exoneration document number. */
     numeroDocumento: string;
+    /** Law article number. Optional. */
+    articulo?: number;
+    /** Law clause (inciso) number. Optional. */
+    inciso?: number;
     /** Issuing institution code (NombreInstitucion, coded in v4.4). */
     nombreInstitucion: string;
+    /** Free-text institution name. Required when nombreInstitucion is "99". */
+    nombreInstitucionOtros?: string;
     /** Issue date (ISO 8601). */
     fechaEmision: string;
     /**
@@ -308,8 +319,16 @@ export function calculateLineItemTotals(item: LineItemInput): CalculatedLineItem
 
       exoneracion = {
         tipoDocumento: tax.exoneracion.tipoDocumento as Exoneracion["tipoDocumento"],
+        ...(tax.exoneracion.tipoDocumentoOtros
+          ? { tipoDocumentoOtros: tax.exoneracion.tipoDocumentoOtros }
+          : {}),
         numeroDocumento: tax.exoneracion.numeroDocumento,
+        ...(tax.exoneracion.articulo !== undefined ? { articulo: tax.exoneracion.articulo } : {}),
+        ...(tax.exoneracion.inciso !== undefined ? { inciso: tax.exoneracion.inciso } : {}),
         nombreInstitucion: tax.exoneracion.nombreInstitucion as Exoneracion["nombreInstitucion"],
+        ...(tax.exoneracion.nombreInstitucionOtros
+          ? { nombreInstitucionOtros: tax.exoneracion.nombreInstitucionOtros }
+          : {}),
         fechaEmision: tax.exoneracion.fechaEmision,
         tarifaExonerada: tax.exoneracion.tarifaExonerada,
         montoExoneracion: exonerationPortion,
@@ -318,6 +337,7 @@ export function calculateLineItemTotals(item: LineItemInput): CalculatedLineItem
 
     const calculatedTax: Impuesto = {
       codigo: tax.codigo as Impuesto["codigo"],
+      ...(tax.codigoImpuestoOtros ? { codigoImpuestoOtros: tax.codigoImpuestoOtros } : {}),
       ...(tax.tarifa !== undefined ? { tarifa: tax.tarifa } : {}),
       ...(tax.datosImpuestoEspecifico
         ? { datosImpuestoEspecifico: tax.datosImpuestoEspecifico }
@@ -406,6 +426,8 @@ export interface InvoiceSummary {
   totalDesgloseImpuesto: TotalDesgloseImpuesto[];
   /** Total net tax across all tax codes. */
   totalImpuesto: number;
+  /** Total other charges (included when other charges are active). */
+  totalOtrosCargos?: number;
   /** Grand total. */
   totalComprobante: number;
 }
@@ -570,6 +592,7 @@ export function calculateInvoiceSummary(
     totalVentaNeta,
     totalDesgloseImpuesto: [...desglose.values()],
     totalImpuesto,
+    ...(totalOtrosCargos > 0 ? { totalOtrosCargos } : {}),
     totalComprobante,
   };
 }

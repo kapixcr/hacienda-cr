@@ -29,6 +29,7 @@ import {
 import type { LineItemInput, CalculatedLineItem } from "@dojocoding/hacienda-sdk";
 import {
   DISCOUNT_CODES,
+  OtroCargoSchema,
   SaleCondition,
   PaymentMethod,
   DocumentTypeCode,
@@ -158,6 +159,12 @@ export const CreateInvoiceInputSchema = z.object({
     .string()
     .default(SaleCondition.CONTADO)
     .describe('Sale condition code: "01"=Cash, "02"=Credit, etc. Defaults to "01"'),
+  condicionVentaOtros: z
+    .string()
+    .min(5)
+    .max(100)
+    .optional()
+    .describe('Free-text sale condition (required when condicionVenta is "99")'),
   medioPago: z
     .string()
     .default(PaymentMethod.EFECTIVO)
@@ -169,10 +176,15 @@ export const CreateInvoiceInputSchema = z.object({
     .min(1)
     .max(1000)
     .describe("Invoice line items (at least one required)"),
+  otrosCargos: z
+    .array(OtroCargoSchema)
+    .max(15)
+    .optional()
+    .describe("Optional other charges (max 15)"),
   plazoCredito: z
     .string()
     .optional()
-    .describe("Credit term in days (required when condicionVenta is 02)"),
+    .describe('Credit term in days (required when condicionVenta is "02" or "10")'),
 });
 
 // ---------------------------------------------------------------------------
@@ -193,8 +205,10 @@ export function registerCreateInvoiceTool(server: McpServer): void {
       proveedorSistemas: CreateInvoiceInputSchema.shape.proveedorSistemas,
       codigoActividadEmisor: CreateInvoiceInputSchema.shape.codigoActividadEmisor,
       condicionVenta: CreateInvoiceInputSchema.shape.condicionVenta,
+      condicionVentaOtros: CreateInvoiceInputSchema.shape.condicionVentaOtros,
       medioPago: CreateInvoiceInputSchema.shape.medioPago,
       lineItems: CreateInvoiceInputSchema.shape.lineItems,
+      otrosCargos: CreateInvoiceInputSchema.shape.otrosCargos,
       plazoCredito: CreateInvoiceInputSchema.shape.plazoCredito,
     },
     async (args) => {
@@ -215,7 +229,11 @@ export function registerCreateInvoiceTool(server: McpServer): void {
         const calculatedItems: CalculatedLineItem[] = lineItemInputs.map(calculateLineItemTotals);
 
         // 2. Calculate invoice summary
-        const summary = calculateInvoiceSummary(calculatedItems);
+        const totalOtrosCargos = (args.otrosCargos ?? []).reduce(
+          (sum, charge) => sum + charge.montoCargo,
+          0,
+        );
+        const summary = calculateInvoiceSummary(calculatedItems, totalOtrosCargos);
 
         // 3. Get next sequence number and generate clave numerica
         const now = new Date();
@@ -287,8 +305,12 @@ export function registerCreateInvoiceTool(server: McpServer): void {
               : {}),
           },
           condicionVenta: args.condicionVenta as FacturaElectronica["condicionVenta"],
+          ...(args.condicionVentaOtros ? { condicionVentaOtros: args.condicionVentaOtros } : {}),
           ...(args.plazoCredito ? { plazoCredito: args.plazoCredito } : {}),
           detalleServicio,
+          ...(args.otrosCargos && args.otrosCargos.length > 0
+            ? { otrosCargos: args.otrosCargos as FacturaElectronica["otrosCargos"] }
+            : {}),
           resumenFactura: {
             totalServGravados: summary.totalServGravados,
             totalServExentos: summary.totalServExentos,
@@ -308,6 +330,9 @@ export function registerCreateInvoiceTool(server: McpServer): void {
             totalVentaNeta: summary.totalVentaNeta,
             totalDesgloseImpuesto: summary.totalDesgloseImpuesto,
             totalImpuesto: summary.totalImpuesto,
+            ...(summary.totalOtrosCargos !== undefined
+              ? { totalOtrosCargos: summary.totalOtrosCargos }
+              : {}),
             medioPago: [
               {
                 tipoMedioPago: args.medioPago as NonNullable<

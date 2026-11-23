@@ -2,8 +2,8 @@
  * Bounds derive from vendored 2026/v4.4 FacturaElectronica XSD: money18/5,
  * max9999999999999.99999; quantity16/3. No coercion or silent unknown-key loss. */
 import { z } from "zod";
-import { FacturaElectronicaSchema, MedioPagoSchema } from "./factura.js";
-import { CodigoComercialSchema, DescuentoSchema, LineaDetalleSchema } from "./linea-detalle.js";
+import { BaseFacturaElectronicaSchema, MedioPagoSchema } from "./factura.js";
+import { BaseDescuentoSchema, CodigoComercialSchema, LineaDetalleSchema } from "./linea-detalle.js";
 import { EmisorSchema } from "./emisor.js";
 import { ReceptorSchema } from "./receptor.js";
 import { IdentificacionSchema } from "./identification.js";
@@ -37,12 +37,14 @@ const PercentageSchema = z
     const n = BigInt(w) * 100000n + BigInt(f.padEnd(5, "0"));
     return n > 0n && n <= 10000000n;
   }, "Discount percentage must be greater than0 and at most100");
-const discountMetadata = DescuentoSchema.pick({
+const discountMetadata = BaseDescuentoSchema.pick({
   codigoDescuento: true,
   codigoDescuentoOtros: true,
   naturalezaDescuento: true,
 })
-  .extend({ codigoDescuento: DescuentoSchema.shape.codigoDescuento.exclude(["01", "02", "03"]) })
+  .extend({
+    codigoDescuento: BaseDescuentoSchema.shape.codigoDescuento.exclude(["01", "02", "03"]),
+  })
   .strict();
 const discountCompanion = (
   d: { codigoDescuento: string; codigoDescuentoOtros?: string },
@@ -132,7 +134,7 @@ export const ExactFePaymentSchema = RetainedExactFePaymentSchema.safeExtend({
     "Supplied payment allocation must be positive",
   ),
 });
-const ExactFeStructureSchema = FacturaElectronicaSchema.omit({
+const ExactFeStructureSchema = BaseFacturaElectronicaSchema.omit({
   detalleServicio: true,
   resumenFactura: true,
   otrosCargos: true,

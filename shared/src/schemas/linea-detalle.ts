@@ -24,37 +24,54 @@ export const CodigoComercialSchema = z.object({
 export type CodigoComercialInput = z.infer<typeof CodigoComercialSchema>;
 
 /** Schema for exoneration information (v4.4 structure). */
-export const ExoneracionSchema = z.object({
-  /** Exoneration document type (TipoDocumentoEX1). */
-  tipoDocumento: ExonerationTypeSchema,
+export const ExoneracionSchema = z
+  .object({
+    /** Exoneration document type (TipoDocumentoEX1). */
+    tipoDocumento: ExonerationTypeSchema,
 
-  /** Free-text document type. Required when tipoDocumento is "99". */
-  tipoDocumentoOtros: z.string().min(5).max(100).optional(),
+    /** Free-text document type. Required when tipoDocumento is "99". */
+    tipoDocumentoOtros: z.string().min(5).max(100).optional(),
 
-  /** Exoneration document number. 3-40 chars. */
-  numeroDocumento: z.string().min(3).max(40),
+    /** Exoneration document number. 3-40 chars. */
+    numeroDocumento: z.string().min(3).max(40),
 
-  /** Law article number. Optional, up to 6 digits. */
-  articulo: z.number().int().min(0).max(999999).optional(),
+    /** Law article number. Optional, up to 6 digits. */
+    articulo: z.number().int().min(0).max(999999).optional(),
 
-  /** Law clause (inciso) number. Optional, up to 6 digits. */
-  inciso: z.number().int().min(0).max(999999).optional(),
+    /** Law clause (inciso) number. Optional, up to 6 digits. */
+    inciso: z.number().int().min(0).max(999999).optional(),
 
-  /** Issuing institution code (coded in v4.4). */
-  nombreInstitucion: z.enum(EXONERATION_INSTITUTIONS),
+    /** Issuing institution code (coded in v4.4). */
+    nombreInstitucion: z.enum(EXONERATION_INSTITUTIONS),
 
-  /** Free-text institution name. Required when nombreInstitucion is "99". */
-  nombreInstitucionOtros: z.string().min(5).max(160).optional(),
+    /** Free-text institution name. Required when nombreInstitucion is "99". */
+    nombreInstitucionOtros: z.string().min(5).max(160).optional(),
 
-  /** Issue date (ISO 8601) — emitted as FechaEmisionEX. */
-  fechaEmision: z.string().min(1),
+    /** Issue date (ISO 8601) — emitted as FechaEmisionEX. */
+    fechaEmision: z.string().min(1),
 
-  /** Exonerated rate percentage (0-100) — emitted as TarifaExonerada. */
-  tarifaExonerada: z.number().min(0).max(100),
+    /** Exonerated rate percentage (0-100) — emitted as TarifaExonerada. */
+    tarifaExonerada: z.number().min(0).max(100),
 
-  /** Exonerated tax amount. */
-  montoExoneracion: z.number().min(0),
-});
+    /** Exonerated tax amount. */
+    montoExoneracion: z.number().min(0),
+  })
+  .superRefine((exo, ctx) => {
+    if (exo.tipoDocumento === "99" && !exo.tipoDocumentoOtros) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'tipoDocumentoOtros is required when tipoDocumento is "99"',
+        path: ["tipoDocumentoOtros"],
+      });
+    }
+    if (exo.nombreInstitucion === "99" && !exo.nombreInstitucionOtros) {
+      ctx.addIssue({
+        code: "custom",
+        message: 'nombreInstitucionOtros is required when nombreInstitucion is "99"',
+        path: ["nombreInstitucionOtros"],
+      });
+    }
+  });
 
 export type ExoneracionInput = z.infer<typeof ExoneracionSchema>;
 
@@ -123,12 +140,15 @@ export const ImpuestoSchema = z
         ["datosImpuestoEspecifico", "volumenUnidadConsumo"],
         "Required for non-alcoholic beverages",
       );
+    if (tax.codigo === "99" && !tax.codigoImpuestoOtros) {
+      issue(["codigoImpuestoOtros"], 'codigoImpuestoOtros is required when codigo is "99"');
+    }
   });
 
 export type ImpuestoInput = z.infer<typeof ImpuestoSchema>;
 
-/** Schema for discount (Descuento), per the v4.4 XSD. */
-export const DescuentoSchema = z.object({
+/** Base discount object schema (without refinements, for `.pick()`/`.omit()`). */
+export const BaseDescuentoSchema = z.object({
   /** Discount amount. Must be positive. */
   montoDescuento: z.number().positive(),
 
@@ -140,6 +160,17 @@ export const DescuentoSchema = z.object({
 
   /** Reason for discount. Optional in v4.4, 3-80 chars. */
   naturalezaDescuento: z.string().min(3).max(80).optional(),
+});
+
+/** Schema for discount (Descuento), per the v4.4 XSD. */
+export const DescuentoSchema = BaseDescuentoSchema.superRefine((discount, ctx) => {
+  if (discount.codigoDescuento === "99" && !discount.codigoDescuentoOtros) {
+    ctx.addIssue({
+      code: "custom",
+      message: 'codigoDescuentoOtros is required when codigoDescuento is "99"',
+      path: ["codigoDescuentoOtros"],
+    });
+  }
 });
 
 export type DescuentoInput = z.infer<typeof DescuentoSchema>;

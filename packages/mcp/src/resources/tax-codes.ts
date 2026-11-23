@@ -9,10 +9,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import {
   TaxCode,
-  IvaRateCode,
+  type IvaRateCode,
+  IVA_RATE_NAMES,
   IVA_RATE_PERCENTAGES,
   ExonerationType,
   UnitOfMeasure,
+  UNITS_OF_MEASURE,
 } from "@dojocoding/hacienda-shared";
 
 const TAX_REFERENCE = {
@@ -59,7 +61,7 @@ const TAX_REFERENCE = {
   ivaRateCodes: Object.entries(IVA_RATE_PERCENTAGES).map(([code, rate]) => ({
     code,
     rate,
-    name: getIvaRateName(code),
+    name: IVA_RATE_NAMES[code as IvaRateCode] ?? `Code ${code}`,
   })),
   exonerationTypes: [
     { code: ExonerationType.COMPRAS_AUTORIZADAS, name: "Compras autorizadas" },
@@ -76,8 +78,21 @@ const TAX_REFERENCE = {
       name: "Exenciones de la Direccion General de Hacienda",
     },
     { code: ExonerationType.TRANSITORIO_V, name: "Transitorio V" },
-    { code: ExonerationType.TRANSITORIO_IX, name: "Transitorio IX" },
+    { code: ExonerationType.SERVICIOS_TURISTICOS_ICT, name: "Servicios turisticos ICT" },
     { code: ExonerationType.TRANSITORIO_XVII, name: "Transitorio XVII" },
+    { code: ExonerationType.ZONA_FRANCA, name: "Exoneracion Zona Franca" },
+    {
+      code: ExonerationType.SERVICIOS_COMPLEMENTARIOS_EXPORTACION,
+      name: "Exoneracion de servicios complementarios para la exportacion",
+    },
+    {
+      code: ExonerationType.CORPORACIONES_MUNICIPALES,
+      name: "Organo de las corporaciones municipales",
+    },
+    {
+      code: ExonerationType.DGH_IMPUESTO_LOCAL_CONCRETA,
+      name: "Exenciones DGH — autorizacion de impuesto local concreta",
+    },
     { code: ExonerationType.OTROS, name: "Otros" },
   ],
   commonUnitsOfMeasure: [
@@ -100,6 +115,7 @@ const TAX_REFERENCE = {
     { code: UnitOfMeasure.GALONES, name: "Galones", description: "Gallons" },
     { code: UnitOfMeasure.OTROS, name: "Otros", description: "Other (specify)" },
   ],
+  allUnitsOfMeasure: UNITS_OF_MEASURE,
   notes: {
     commonUsage:
       "For most services, use tax code '01' (IVA) with rate code '08' (13% general rate). " +
@@ -110,29 +126,6 @@ const TAX_REFERENCE = {
       "The reduced rates (1%, 2%, 4%) apply to specific goods like basic foodstuffs.",
   },
 };
-
-function getIvaRateName(code: string): string {
-  switch (code) {
-    case IvaRateCode.EXENTO:
-      return "Exento (0%)";
-    case IvaRateCode.REDUCIDA_1:
-      return "Tarifa reducida 1%";
-    case IvaRateCode.REDUCIDA_2:
-      return "Tarifa reducida 2%";
-    case IvaRateCode.REDUCIDA_4:
-      return "Tarifa reducida 4%";
-    case IvaRateCode.TRANSITORIO_0:
-      return "Transitorio 0%";
-    case IvaRateCode.TRANSITORIO_4:
-      return "Transitorio 4%";
-    case IvaRateCode.TRANSITORIO_8:
-      return "Transitorio 8%";
-    case IvaRateCode.GENERAL_13:
-      return "Tarifa general 13%";
-    default:
-      return `Code ${code}`;
-  }
-}
 
 export function registerTaxCodesResource(server: McpServer): void {
   server.resource(

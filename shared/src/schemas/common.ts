@@ -8,7 +8,7 @@ import {
   isPositiveMonetaryText,
   normalizeMonetaryInput,
 } from "../monetary/index.js";
-import { ExonerationType } from "../constants/index.js";
+import { CANTONS_BY_PROVINCE, DISTRICTS_BY_CANTON, ExonerationType } from "../constants/index.js";
 import { IvaRateCode, PaymentMethod, SaleCondition, TaxCode } from "../generated/index.js";
 
 /** Schema for tax type codes (Codigo de Impuesto), full v4.4 catalog. */
@@ -89,21 +89,41 @@ export const TelefonoSchema = z.object({
 export type TelefonoInput = z.infer<typeof TelefonoSchema>;
 
 /** Schema for location (Ubicacion). */
-export const UbicacionSchema = z.object({
-  /** Province code (1-7). */
-  provincia: z.string().regex(/^[1-7]$/),
+export const UbicacionSchema = z
+  .object({
+    /** Province code (1-7). */
+    provincia: z.string().regex(/^[1-7]$/),
 
-  /** Canton code (2 digits, 01-99). */
-  canton: z.string().regex(/^\d{2}$/),
+    /** Canton code (2 digits, 01-99). */
+    canton: z.string().regex(/^\d{2}$/),
 
-  /** Distrito code (2 digits, 01-99). */
-  distrito: z.string().regex(/^\d{2}$/),
+    /** Distrito code (2 digits, 01-99). */
+    distrito: z.string().regex(/^\d{2}$/),
 
-  /** Barrio name (free text, 5-50 chars in v4.4 — no longer a code). Optional. */
-  barrio: z.string().min(5).max(50).optional(),
+    /** Barrio name (free text, 5-50 chars in v4.4 — no longer a code). Optional. */
+    barrio: z.string().min(5).max(50).optional(),
 
-  /** Additional address details. Required by the v4.4 XSD, 5-250 chars. */
-  otrasSenas: z.string().min(5).max(250),
-});
+    /** Additional address details. Required by the v4.4 XSD, 5-250 chars. */
+    otrasSenas: z.string().min(5).max(250),
+  })
+  .superRefine((data, ctx) => {
+    const cantons = CANTONS_BY_PROVINCE[data.provincia];
+    if (!cantons || !cantons.includes(data.canton)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Canton "${data.canton}" is not valid for province "${data.provincia}"`,
+        path: ["canton"],
+      });
+      return;
+    }
+    const districts = DISTRICTS_BY_CANTON[`${data.provincia}.${data.canton}`];
+    if (!districts || !districts.includes(data.distrito)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Distrito "${data.distrito}" is not valid for province "${data.provincia}" and canton "${data.canton}"`,
+        path: ["distrito"],
+      });
+    }
+  });
 
 export type UbicacionInput = z.infer<typeof UbicacionSchema>;

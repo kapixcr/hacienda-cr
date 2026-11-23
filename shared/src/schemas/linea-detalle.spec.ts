@@ -322,6 +322,18 @@ describe("ImpuestoSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("should reject codigo 99 without codigoImpuestoOtros", () => {
+    expect(ImpuestoSchema.safeParse({ codigo: "99", tarifa: 5, monto: 500 }).success).toBe(false);
+    expect(
+      ImpuestoSchema.safeParse({
+        codigo: "99",
+        codigoImpuestoOtros: "Impuesto municipal",
+        tarifa: 5,
+        monto: 500,
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe("ExoneracionSchema", () => {
@@ -371,6 +383,15 @@ describe("ExoneracionSchema", () => {
       nombreInstitucionOtros: "Institución especial",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("should reject tipoDocumento 99 without tipoDocumentoOtros and nombreInstitucion 99 without nombreInstitucionOtros", () => {
+    expect(ExoneracionSchema.safeParse({ ...validExoneracion, tipoDocumento: "99" }).success).toBe(
+      false,
+    );
+    expect(
+      ExoneracionSchema.safeParse({ ...validExoneracion, nombreInstitucion: "99" }).success,
+    ).toBe(false);
   });
 
   it("should accept optional articulo and inciso integers", () => {
@@ -464,6 +485,14 @@ describe("DescuentoSchema", () => {
       codigoDescuentoOtros: "Descuento especial",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("should reject codigoDescuento 99 without codigoDescuentoOtros", () => {
+    const result = DescuentoSchema.safeParse({
+      montoDescuento: 5000,
+      codigoDescuento: "99",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("should reject a discount without codigoDescuento (required in v4.4)", () => {

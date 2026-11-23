@@ -45,6 +45,7 @@ export { SALE_CONDITION_NAMES, REP_SALE_CONDITIONS } from "./sale-conditions.js"
 export { PAYMENT_METHOD_NAMES } from "./payment-methods.js";
 
 export { PROVINCE_NAMES } from "./provinces.js";
+export { CANTONS_BY_PROVINCE, DISTRICTS_BY_CANTON } from "./locations.js";
 
 export {
   XADES_POLICY_URI,

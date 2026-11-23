@@ -508,6 +508,7 @@ describe("calculateLineItemTotals", () => {
               tipoDocumento: "03",
               numeroDocumento: "AL-777-2025",
               nombreInstitucion: "99",
+              nombreInstitucionOtros: "Institución especial",
               fechaEmision: "2025-06-01T00:00:00-06:00",
               tarifaExonerada: 13,
             },
@@ -889,6 +890,7 @@ describe("calculateInvoiceSummary", () => {
     ];
 
     const summary = calculateInvoiceSummary(items, 500);
+    expect(summary.totalOtrosCargos).toBe(500);
     expect(summary.totalComprobante).toBe(11800); // 10000 + 1300 + 500
   });
 
